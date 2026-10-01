@@ -1,0 +1,143 @@
+# On importe les bibliothèques nécessaires
+from time import *
+from gpiozero import Button
+from pygame import mixer
+
+# On initialise le mixer
+mixer.init()
+
+# On charge les sons
+Sons_Normal = {
+    "Do": mixer.Sound("Do.wav"),
+    "Re": mixer.Sound("Re.wav"), 
+    "Mi": mixer.Sound("Mi.wav"),
+    "Fa": mixer.Sound("Fa.wav"),
+    "Sol": mixer.Sound("Sol.wav"),
+    "La": mixer.Sound("La.wav"),
+    "Si": mixer.Sound("Si.wav"),
+    "Do_Aigue": mixer.Sound("Do_Aigue.wav")
+}
+
+Start = mixer.Sound("oh_yes.wav")
+Start_Cha = mixer.Channel(1)
+Cheat = mixer.Sound("ralsei.wav")
+Cheat_Cha = mixer.Channel(1)
+
+Sons_Debug = {
+    "Do": mixer.Sound("Night_Hunter.wav"),
+    "Re": mixer.Sound("Butchers_Boulevar.wav"), 
+    "Mi": mixer.Sound("Descoles_Theme.wav"),
+    "Fa": mixer.Sound("Frieren.wav"),
+    "Sol": mixer.Sound("Interstellar.wav"),
+    "La": mixer.Sound("Song_of_Storms.wav"),
+    "Si": mixer.Sound("Dnd.wav")
+}
+
+# On crée les canaux pour chaque note
+Canaux = {
+    "Do": mixer.Channel(0),
+    "Re": mixer.Channel(1),
+    "Mi": mixer.Channel(2),
+    "Fa": mixer.Channel(3),
+    "Sol": mixer.Channel(4),
+    "La": mixer.Channel(5),
+    "Si": mixer.Channel(6),
+    "Do_Aigue": mixer.Channel(7)
+}
+
+Mode_Debug = False
+Pile_Notes = []
+
+# Code pour passer en mode debug
+Debug_Code = ["Do", "Re", "Mi", "Fa", "Do", "Re", "Mi", "Fa"]
+
+boutons = {
+    "Do": Button(2),
+    "Re": Button(3),
+    "Mi": Button(4),
+    "Fa": Button(17),
+    "Sol": Button(27),
+    "La": Button(22),
+    "Si": Button(10),
+    "Do_Aigue": Button(9)
+}
+
+# Fonction permettant de garder en mémoire uniquement 8 notes et de passer en mode debug
+def gerer_pile(note):
+    global Mode_Debug, Pile_Notes
+    
+    Pile_Notes.append(note)
+
+    if len(Pile_Notes) > 8:
+        Pile_Notes.pop(0)
+        
+    print(f"Pile actuelle : {Pile_Notes}") # Pratique pour tester dans ton terminal !
+
+    if Pile_Notes == Debug_Code:
+        Mode_Debug = True
+        Pile_Notes.clear()
+        
+        # On coupe toutes les notes normales en cours pour la transition
+        for canal in Canaux.values():
+            canal.fadeout(200)
+            
+        print("🚨 MODE DEBUG ACTIVÉ ! 🚨")
+        Cheat_Cha.play(Cheat)
+
+
+def presser_touche(note):
+    # Gère l'action lorsqu'on appuie sur un bouton.
+    global Mode_Debug
+    
+    Canal = Canaux[note]
+    
+    if not Mode_Debug:
+        # --- MODE NORMAL ---
+        Son = Sons_Normal[note]
+        if not Canal.get_busy():
+            # Ajout de fade_ms=150 pour une attaque de note très douce (fade in)
+            Canal.play(Son, loops=-1, fade_ms=150)
+            
+    else:
+        # --- MODE DEBUG ---
+        if note == "Do_Aigue":
+            # En quittant le mode débug, on éteint proprement toutes les musiques
+            for c in Canaux.values():
+                c.fadeout(300)
+            Mode_Debug = False
+            print("▶️ Retour au mode normal.")
+            return
+            
+        Son_Deb = Sons_Debug[note]
+        
+        if Canal.get_busy():
+            # Si on appuie sur la touche d'une musique déjà active : on l'arrête
+            Canal.fadeout(200) 
+        else:
+            # Sinon, on coupe TOUTES les autres musiques qui sont éventuellement en train de jouer...
+            for nom_canal, canal_obj in Canaux.items():
+                if nom_canal != note and canal_obj.get_busy():
+                    canal_obj.fadeout(200) # Coupe les autres musiques proprement en 0.2s
+            
+            # ... et on lance enfin la nouvelle musique (avec un petit fade-in sympa de 300ms)
+            Canal.play(Son_Deb, loops=-1, fade_ms=200)
+
+def relacher_touche(note):
+    # Gère l'action lorsqu'on relâche le bouton.
+    global Mode_Debug
+    
+    # En mode normal, relâcher la touche coupe le son et enregistre dans la pile
+    # En mode débug, on ne fait rien (la musique continue)
+    if not Mode_Debug:
+        Canaux[note].fadeout(200)
+        gerer_pile(note) 
+
+# On associe les boutons aux fonctions
+for nom, bouton in boutons.items():
+    bouton.when_pressed = lambda n=nom: presser_touche(n)
+    bouton.when_released = lambda n=nom: relacher_touche(n)
+
+print("Ocarina démarré avec succès !")
+Start_Cha.play(Start)
+while True:
+    sleep(0.1)
